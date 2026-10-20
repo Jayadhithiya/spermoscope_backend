@@ -1,0 +1,36 @@
+# ==============================================================================
+# Spermoscope Backend - Git Ignore
+# ==============================================================================
+
+# Environment & Secret Keys (DO NOT COMMIT SECRETS)
+.env
+.env.*
+!.env.example
+
+# Python cache & compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Local databases
+*.db
+*.sqlite3
+
+# Uploaded files
+uploads/
+temp_image.jpg
+
+# Virtual environments
+env/
+venv/
+ENV/
+.venv/
+
+# IDE & OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
