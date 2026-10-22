@@ -525,10 +525,27 @@ def upload_sample(uid, sample_type):
 @app.route("/get_sample_status/<uid>", methods=["GET"])
 def get_sample_status(uid):
     p = db_manager.get_patient_by_id_or_name(uid)
+    if not p:
+        return jsonify({
+            "status": "error",
+            "message": "Patient not found",
+            "current_sample": 1,
+            "uploaded_samples": []
+        }), 404
+
+    pid = p.get("patient_id", uid)
+    chart_samples = db_manager.get_samples_for_chart(pid)
+    uploaded = []
+    for s in chart_samples:
+        st = s.get("sample_type")
+        if str(st).isdigit():
+            uploaded.append(int(st))
+
     return jsonify({
         "status": "processed",
-        "uid": uid,
-        "current_sample": p.get("current_sample", 1) if p else 1,
+        "uid": pid,
+        "current_sample": p.get("current_sample", 1),
+        "uploaded_samples": uploaded,
     }), 200
 
 
@@ -542,12 +559,30 @@ def update_current_sample(uid):
 
 @app.route("/result", methods=["GET"])
 def result():
-    uid = request.args.get("uid", "p001").strip()
-    p = db_manager.get_patient_by_id_or_name(uid)
-    if not p:
-        return jsonify({"status": "error", "message": "No patient found"}), 404
+    uid = request.args.get("uid", "").strip()
+    doctor_email = request.args.get("email", "").strip()
 
-    pid = p.get("patient_id", uid)
+    p = None
+    if uid:
+        p = db_manager.get_patient_by_id_or_name(uid)
+
+    if not p and doctor_email:
+        doctor_patients = db_manager.get_recent_patients(doctor_email=doctor_email)
+        if doctor_patients:
+            p = doctor_patients[0]
+
+    if not p and not uid and not doctor_email:
+        all_patients = db_manager.get_recent_patients()
+        if all_patients:
+            p = all_patients[0]
+
+    if not p:
+        return jsonify({
+            "status": "error",
+            "message": "No patient found. Please search by ID or register a new patient."
+        }), 404
+
+    pid = p.get("patient_id", uid or "p001")
     latest = db_manager.get_latest_sample(pid)
 
     patient_dict = {

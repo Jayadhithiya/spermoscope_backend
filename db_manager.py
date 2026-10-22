@@ -32,14 +32,38 @@ from pymongo.errors import PyMongoError, ServerSelectionTimeoutError
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "spermoscope.db")
 
+# Environment (.env) Loader
+def load_env_file():
+    search_dirs = [
+        os.getcwd(),
+        BASE_DIR,
+        os.path.abspath(os.path.join(BASE_DIR, "..")),
+    ]
+    for d in search_dirs:
+        env_path = os.path.join(d, ".env")
+        if os.path.isfile(env_path):
+            try:
+                with open(env_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#") or "=" not in line:
+                            continue
+                        k, v = line.split("=", 1)
+                        k = k.strip()
+                        v = v.strip().strip("'\"")
+                        if k and k not in os.environ:
+                            os.environ[k] = v
+            except Exception:
+                pass
+            break
+
+load_env_file()
+
 # Read environment
 def get_env_var(name, default=""):
     return os.environ.get(name) or default
 
-MONGODB_URI = get_env_var(
-    "MONGODB_URI",
-    "mongodb+srv://jayadhithiya_db_user:Jayadhithiya18@cluster0.iom0rnt.mongodb.net/spermoscope?retryWrites=true&w=majority"
-)
+MONGODB_URI = get_env_var("MONGODB_URI", "")
 MONGODB_DB_NAME = get_env_var("MONGODB_DB_NAME", "spermoscope")
 
 _mongo_client = None
@@ -58,8 +82,8 @@ def init_db_connection():
     try:
         client = pymongo.MongoClient(
             MONGODB_URI,
-            serverSelectionTimeoutMS=4000,
-            connectTimeoutMS=4000,
+            serverSelectionTimeoutMS=1500,
+            connectTimeoutMS=1500,
         )
         # Test connection
         client.admin.command('ping')
@@ -91,10 +115,10 @@ def is_using_mongo():
     if _use_mongo and _mongo_db is not None:
         return True
 
-    # Try reconnecting every 60 seconds
+    # Try reconnecting every 300 seconds (5 mins) if failed
     import time
     now = time.time()
-    if now - _last_connection_attempt < 60:
+    if now - _last_connection_attempt < 300:
         return False
 
     _last_connection_attempt = now
@@ -225,10 +249,12 @@ def get_recent_patients(doctor_email: str = None, doctor_uid: str = None):
 
     with get_sqlite_conn() as conn:
         if target_uids:
-            placeholders = ",".join("?" for _ in target_uids)
+            all_uids = list(target_uids) + [str(x).lower() for x in target_uids]
+            unique_uids = list(set(all_uids))
+            placeholders = ",".join("?" for _ in unique_uids)
             rows = conn.execute(
-                f"SELECT * FROM patients WHERE doctor_uid IN ({placeholders}) ORDER BY created_at DESC LIMIT 20",
-                tuple(target_uids)
+                f"SELECT * FROM patients WHERE doctor_uid IN ({placeholders}) OR LOWER(doctor_uid) IN ({placeholders}) ORDER BY created_at DESC LIMIT 20",
+                tuple(unique_uids) + tuple(unique_uids)
             ).fetchall()
         else:
             rows = conn.execute("SELECT * FROM patients ORDER BY created_at DESC LIMIT 20").fetchall()
@@ -247,9 +273,6 @@ def get_patient_by_id_or_name(query: str):
                 {"name": {"$regex": f"^{q}$", "$options": "i"}}
             ]
         })
-        if not doc:
-            # First patient fallback
-            doc = _mongo_db.patients.find_one()
         if doc:
             doc.pop("_id", None)
             return doc
@@ -259,8 +282,6 @@ def get_patient_by_id_or_name(query: str):
         row = conn.execute("SELECT * FROM patients WHERE patient_id=?", (q,)).fetchone()
         if not row:
             row = conn.execute("SELECT * FROM patients WHERE LOWER(name)=?", (q.lower(),)).fetchone()
-        if not row:
-            row = conn.execute("SELECT * FROM patients LIMIT 1").fetchone()
         return dict(row) if row else None
 
 
