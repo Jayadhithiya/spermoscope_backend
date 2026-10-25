@@ -704,5 +704,6 @@ if __name__ == "__main__":
     print("  Doctor  : doctor@demo.com  /  Password123!")
     print("  Admin   : admin@demo.com   /  Admin123!")
     print("  Legacy  : doctor@demo.com  /  password123  (compat)")
-    print("  Health  : http://localhost:8080/health\n")
-    app.run(host="0.0.0.0", port=8080, debug=True, use_reloader=False)
+    port = int(os.environ.get("PORT", 8080))
+    print(f"  Health  : http://localhost:{port}/health\n")
+    app.run(host="0.0.0.0", port=port, debug=True, use_reloader=False)
